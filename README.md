@@ -84,6 +84,18 @@ Same dashboard, whether it's a fixed extract or a live feed. Deploy steps: see [
 
 *Same analysis (AMS scenario shown: ~42% printable, ~10 hrs/day, concentrated in the cool overnight hours) — the only difference is the data source, labeled bottom-left in each. Switch the scenario radio to compare ambient (0%) vs. AMS vs. mini-split. ([analysis chart](output-validation/analysis_chart.png): printable hours by hour, ambient vs. AMS.)*
 
+**Validation result — the two sources agree:**
+
+| Source | Rows | AMS printable |
+|---|---|---|
+| CSV snapshot | 13,981 | 41.84% |
+| Live ruuvi.db | 14,015 | 41.73% |
+
+The 0.11% gap isn't error — it's proof the feed is live. The live DB holds 34 newer
+readings logged on a hot July afternoon (above 86°F, so *not* printable), which correctly
+pulls the number **down**. Same logic, same answer, and the drift moves the direction the
+physics says it should — so the model responds sensibly to new data, not just consistently.
+
 ---
 
 ## Honest caveats
