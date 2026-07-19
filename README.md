@@ -96,6 +96,9 @@ readings logged on a hot July afternoon (above 86°F, so *not* printable), which
 pulls the number **down**. Same logic, same answer, and the drift moves the direction the
 physics says it should — so the model responds sensibly to new data, not just consistently.
 
+*Checking the same number more than one way — a different format, an independent source — is
+standard practice here, not a one-off.*
+
 ---
 
 ## Honest caveats
