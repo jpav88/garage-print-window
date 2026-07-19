@@ -61,7 +61,7 @@ app_ui = ui.page_sidebar(
                 "ams": "AMS 2 Pro — humidity solved",
                 "ams_mini": "AMS + Mr Cool mini-split (projected)",
             },
-            selected="ambient",
+            selected=os.environ.get("GARAGE_DEFAULT", "ambient"),
         ),
         ui.input_slider("cold", "PLA cold limit (°F, TBD)", min=32, max=75, value=50),
         ui.hr(),

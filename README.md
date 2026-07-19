@@ -82,7 +82,7 @@ Same dashboard, whether it's a fixed extract or a live feed. Deploy steps: see [
 |---|---|
 | ![CSV snapshot source](output-validation/1_source_csv_snapshot.png) | ![Live DB source](output-validation/2_source_live_db.png) |
 
-*Both runs agree — ambient printability is ~0% (humidity blocks ~98% of the time). The only difference is the data source, shown bottom-left in each. ([analysis chart](output-validation/analysis_chart.png): printable hours by hour, ambient vs. AMS.)*
+*Same analysis (AMS scenario shown: ~42% printable, ~10 hrs/day, concentrated in the cool overnight hours) — the only difference is the data source, labeled bottom-left in each. Switch the scenario radio to compare ambient (0%) vs. AMS vs. mini-split. ([analysis chart](output-validation/analysis_chart.png): printable hours by hour, ambient vs. AMS.)*
 
 ---
 
