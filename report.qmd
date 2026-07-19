@@ -1,0 +1,93 @@
+---
+title: "Garage Print Window — a data-driven hardware decision"
+subtitle: "When can I reliably 3D print in a hot, humid Texas garage?"
+format:
+  html:
+    toc: true
+    code-fold: true
+    theme: cosmo
+jupyter: python3
+---
+
+## The question
+
+My Bambu printer lives in the garage. PLA prints well only when two conditions
+hold at once:
+
+- **Filament stays dry** — ambient humidity below ~**45% RH** (PLA is hygroscopic;
+  absorbed moisture flashes to steam → stringing, bubbles, poor layer adhesion).
+- **Ambient temperature sits in a band** — below ~**86°F** (heat → stringing, soft
+  filament, heat creep) and above a **cold limit** (too cold → warping; exact limit TBD).
+
+So: **how many hours a day can I actually print, and what hardware is worth buying
+to widen that window?**
+
+## The data
+
+A RuuviTag in the garage logs temperature and humidity roughly once a minute. The
+readings flow through a pipeline I built — RuuviTag (BLE) → ESP32/ESPHome gateway →
+MQTT (Mosquitto) → SQLite — and `extract_data.py` pivots them into the snapshot below.
+
+```{python}
+import pandas as pd
+df = pd.read_csv("data/garage_readings.csv", parse_dates=["ts"])
+TEMP_MAX, HUM_MAX = 86.0, 45.0
+print(f"{len(df):,} minutes  |  {df.ts.min():%Y-%m-%d} to {df.ts.max():%Y-%m-%d}")
+```
+
+## Method
+
+For each minute, a moment is **printable** when temperature is in the band and
+humidity is under the limit. I then model each hardware intervention by relaxing
+the constraint it removes.
+
+```{python}
+temp_ok = (df.temp_f < TEMP_MAX)          # (cold limit doesn't bind in the summer data)
+hum_ok  = df.humidity < HUM_MAX
+amb  = (temp_ok & hum_ok).mean()          # ambient, no hardware
+ams  = temp_ok.mean()                      # AMS 2 Pro: humidity solved
+print(f"Ambient printable:       {100*amb:5.1f}%  ({24*amb:.1f} hrs/day)")
+print(f"With AMS 2 Pro:          {100*ams:5.1f}%  ({24*ams:.1f} hrs/day)")
+print(f"Humidity OK:             {100*hum_ok.mean():5.1f}% of the time")
+print(f"Temperature OK (<86F):   {100*temp_ok.mean():5.1f}% of the time")
+```
+
+## Findings
+
+```{python}
+#| label: fig-hour
+#| fig-cap: "Share of minutes printable, by hour of day (ambient vs. AMS 2 Pro)."
+import matplotlib.pyplot as plt
+df["hour"] = df.ts.dt.hour
+amb_h = (df.assign(p=temp_ok & hum_ok).groupby("hour").p.mean()*100)
+ams_h = (df.assign(p=temp_ok).groupby("hour").p.mean()*100)
+fig, ax = plt.subplots(figsize=(8,3.5))
+ax.bar(amb_h.index-0.2, amb_h.values, width=0.4, label="Ambient", color="#264653")
+ax.bar(ams_h.index+0.2, ams_h.values, width=0.4, label="With AMS 2 Pro", color="#2a9d8f")
+ax.set_xlabel("Hour of day"); ax.set_ylabel("% printable"); ax.set_ylim(0,100)
+ax.set_xticks(range(0,24,2)); ax.legend(); plt.tight_layout()
+plt.show()
+```
+
+The physics is self-consistent: **when it's cool enough it's too humid, and when
+it's dry enough it's too hot** — the two good windows never overlap, which is why
+ambient printability lands near zero. Humidity is the dominant blocker.
+
+## Recommendation
+
+1. **AMS 2 Pro — buy (done).** Its sealed enclosure + desiccant remove humidity as
+   a variable, taking the printable window from essentially none to the ~40%+ of the
+   day that's already cool enough. In peak summer it's the difference between printing
+   and not printing at all.
+2. **Mr Cool mini-split — plan.** With humidity handled, temperature is the only
+   remaining constraint. A mini-split holds the garage inside the band year-round;
+   the next step is to quantify the hours/day it buys per season once more data (and
+   the PLA cold limit) are in hand.
+
+::: {.callout-note}
+## Honest caveats
+~10 days of peak-summer data — proves the method and the summer case; annual
+conclusions need more history. The PLA cold limit is a parameter, not yet pinned
+down. Ambient humidity stands in for the filament's environment (valid pre-AMS,
+since exposed PLA equilibrates to ambient quickly).
+:::
