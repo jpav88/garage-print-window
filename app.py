@@ -1,21 +1,55 @@
 """Garage Print Window — Shiny for Python dashboard.
 
 Answers: how many hours/day can I reliably 3D print in the garage, and how much
-does each hardware intervention widen that window? Reads a portable CSV snapshot
-extracted from the RuuviTag pipeline (see extract_data.py).
+does each hardware intervention widen that window?
+
+Data source is automatic:
+  * If the live ruuvi SQLite DB is present (running on the Mac mini), read it
+    directly and refresh periodically -> a near-realtime "live pivot table."
+  * Otherwise (e.g. deployed to shinyapps.io) fall back to the CSV snapshot
+    produced by extract_data.py.
 """
+import os
+import sqlite3
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
 from shiny import App, reactive, render, ui
 
-DATA = Path(__file__).parent / "data" / "garage_readings.csv"
-TEMP_MAX = 86.0   # PLA upper ambient limit (°F)
-HUM_MAX = 45.0    # filament dry limit (% RH)
+HERE = Path(__file__).parent
+CSV = HERE / "data" / "garage_readings.csv"
+DB = Path(os.path.expanduser("~/Programming-pavdog/ruuvi/data/ruuvi.db"))
+REFRESH_SECS = 60          # how often to re-read when running live
+TEMP_MAX = 86.0            # PLA upper ambient limit (°F)
+HUM_MAX = 45.0             # filament dry limit (% RH)
 
-df0 = pd.read_csv(DATA, parse_dates=["ts"])
-df0["hour"] = df0["ts"].dt.hour
+PIVOT_SQL = """
+WITH t AS (SELECT strftime('%Y-%m-%d %H:%M', ts, 'localtime') m, AVG(value) temp_f
+           FROM readings WHERE metric='garage_temp_f' GROUP BY m),
+     h AS (SELECT strftime('%Y-%m-%d %H:%M', ts, 'localtime') m, AVG(value) humidity
+           FROM readings WHERE metric='garage_humidity' GROUP BY m)
+SELECT t.m AS ts, t.temp_f, h.humidity FROM t JOIN h ON t.m=h.m ORDER BY t.m;
+"""
+
+
+def load_readings():
+    """Return (dataframe, source_label). Live DB if present, else CSV snapshot.
+
+    Set GARAGE_FORCE_CSV=1 to force the snapshot source (useful for demoing the
+    deployed behavior locally).
+    """
+    if DB.exists() and not os.environ.get("GARAGE_FORCE_CSV"):
+        try:
+            con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+            df = pd.read_sql_query(PIVOT_SQL, con, parse_dates=["ts"])
+            con.close()
+            if len(df):
+                return df, "LIVE — ruuvi.db"
+        except Exception:
+            pass
+    return pd.read_csv(CSV, parse_dates=["ts"]), "Snapshot — CSV"
+
 
 app_ui = ui.page_sidebar(
     ui.sidebar(
@@ -33,7 +67,7 @@ app_ui = ui.page_sidebar(
         ui.hr(),
         ui.markdown("**Printable when** temp is between the cold limit and **86°F** "
                     "*and* humidity is under **45%**."),
-        ui.markdown("_Data: RuuviTag garage sensor, ~1 reading/min._"),
+        ui.output_text("source"),
         width=320,
     ),
     ui.layout_columns(
@@ -50,19 +84,33 @@ app_ui = ui.page_sidebar(
 
 def server(input, output, session):
     @reactive.calc
+    def raw():
+        reactive.invalidate_later(REFRESH_SECS)   # periodic refresh -> realtime when live
+        df, src = load_readings()
+        df["hour"] = df["ts"].dt.hour
+        return df, src
+
+    @reactive.calc
     def data():
-        d = df0.copy()
+        d, _ = raw()
+        d = d.copy()
         temp_ok = (d["temp_f"] < TEMP_MAX) & (d["temp_f"] > input.cold())
         hum_ok = d["humidity"] < HUM_MAX
         s = input.scenario()
         if s == "ambient":
-            d["printable"] = temp_ok & hum_ok
-        elif s == "ams":                     # desiccant removes humidity as a variable
-            d["printable"] = temp_ok
-        else:                                # mini-split also holds temp in band
-            d["printable"] = True
-        d["temp_ok"], d["hum_ok"] = temp_ok, hum_ok
+            printable = temp_ok & hum_ok
+        elif s == "ams":                          # desiccant removes humidity as a variable
+            printable = temp_ok
+        else:                                     # mini-split also holds temp in band
+            printable = pd.Series(True, index=d.index)
+        d["printable"] = printable.values
+        d["temp_ok"], d["hum_ok"] = temp_ok.values, hum_ok.values
         return d
+
+    @render.text
+    def source():
+        _, src = raw()
+        return f"Data source: {src}"
 
     @render.text
     def vb_pct():

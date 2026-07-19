@@ -67,6 +67,23 @@ Full hardware writeup: **[jpav88/ruuvi-esp32-homekit](https://github.com/jpav88/
 
 *Why Shiny for **Python**:* it runs Posit's signature framework in the language I write daily — and shows how low the barrier is to getting into their stack.
 
+## From static snapshot to live data (validate, then step up)
+
+Built in two deliberate steps — the same maturity curve I'd take a customer through:
+
+1. **Validate on a static snapshot.** `extract_data.py` pulls the readings into a CSV extract — essentially a pivot table, the way you'd validate the logic in a spreadsheet first. Fast, reproducible, and it deploys anywhere.
+2. **Step up to live.** Running on the Mac mini, the app reads the SQLite DB directly and refreshes on an interval — a near-realtime "live pivot table." Deployed remotely (no DB), it falls back to the snapshot automatically.
+
+Same dashboard, whether it's a fixed extract or a live feed. Deploy steps: see [`DEPLOY.md`](DEPLOY.md).
+
+### Output validation — same analysis, both sources
+
+| 1. Static snapshot (CSV) | 2. Live database (ruuvi.db) |
+|---|---|
+| ![CSV snapshot source](output-validation/1_source_csv_snapshot.png) | ![Live DB source](output-validation/2_source_live_db.png) |
+
+*Both runs agree — ambient printability is ~0% (humidity blocks ~98% of the time). The only difference is the data source, shown bottom-left in each. ([analysis chart](output-validation/analysis_chart.png): printable hours by hour, ambient vs. AMS.)*
+
 ---
 
 ## Honest caveats
